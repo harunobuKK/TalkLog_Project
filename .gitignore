@@ -19,3 +19,6 @@ tmp_audio/
 # OS-specific
 .DS_Store
 Thumbs.db
+
+# Custom additions
+sample_voice.m4a
