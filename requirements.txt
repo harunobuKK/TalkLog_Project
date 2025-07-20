@@ -1,0 +1,9 @@
+# requirements.txt
+flask
+flask-cors
+google-generativeai==0.5.4  # 特定のバージョンを指定 (例)
+protobuf==3.20.3           # ★ Protobuf のバージョンを 3 系に固定
+google-api-core>=1.34.1,<3.0.0 # 互換性のある範囲を指定 (念のため)
+googleapis-common-protos>=1.62.0,<2.0.0 # 互換性のある範囲を指定 (念のため)
+python-dotenv
+requests

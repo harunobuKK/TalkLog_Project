@@ -1,0 +1,173 @@
+/* frontend/style.css */
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap');
+
+:root {
+  --accent-1: #007aff;
+  --accent-1-hover: #005bb5;
+  --accent-2: #ff3b30;
+  --bg-light: #f4f4f9;
+  --text-main: #1d1d1f;
+  --text-sub: #8a8a8e;
+  --light-text-color: #ffffff;
+  --border-color: #d1d1d6;
+  --ai-bg-color: #e5e5ea;
+  --user-bg-color: var(--accent-1);
+}
+
+body {
+  font-family: 'Noto Sans JP', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background-color: var(--bg-light);
+  color: var(--text-main);
+  margin: 0;
+  overscroll-behavior-y: none; /* Prevent pull-to-refresh */
+}
+
+#chat-container {
+  width: 100%;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.chat-box {
+  flex-grow: 1;
+  overflow-y: auto;
+  padding: 1.5rem 1rem calc(6rem + 2.5rem); /* Bottom padding for footer */
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.chat-box p {
+  margin: 0;
+  padding: 0.75rem 1.1rem;
+  border-radius: 1.25rem;
+  max-width: 75%;
+  line-height: 1.6;
+  word-wrap: break-word;
+  animation: fadeIn 0.3s ease-out;
+}
+
+.chat-box p b {
+  display: none; /* Hide role text */
+}
+
+.chat-box p.user {
+  align-self: flex-end;
+  background: var(--user-bg-color);
+  color: var(--light-text-color);
+}
+
+.chat-box p.ai {
+  align-self: flex-start;
+  background: var(--ai-bg-color);
+  color: var(--text-main);
+}
+
+.chat-box p.system {
+  align-self: center;
+  background: none;
+  color: var(--text-sub);
+  font-size: 0.85rem;
+  text-align: center;
+}
+
+.chat-footer {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 1rem;
+  background: linear-gradient(to top, rgba(244,244,249,1) 70%, rgba(244,244,249,0));
+}
+
+.input-area {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: #ffffff;
+  border: 1px solid #e0e0e0;
+  border-radius: 2rem; /* Pill shape */
+  padding: 0.5rem;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.input-area textarea {
+  flex: 1 1 auto;   /* fill remaining space & allow shrink */
+  min-width: 0;     /* Chrome でのはみ出しを防止 */
+  resize: none;
+}
+
+#textInput {
+  flex-grow: 1;
+  border: none;
+  background: transparent;
+  padding: 0.5rem;
+  font-family: inherit;
+  font-size: 1rem;
+  resize: none;
+  max-height: 100px;
+  overflow-y: auto;
+}
+
+#textInput:focus { outline: none; }
+
+.icon-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  padding: 0.5rem;
+  border-radius: 50%;
+  color: var(--text-sub);
+  transition: background-color 0.2s, color 0.2s;
+  flex-shrink: 0;
+}
+
+.icon-btn:hover:not(:disabled) { background-color: #f0f0f0; }
+.icon-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+#recBtn.recording { color: var(--accent-2); }
+
+#sendBtn {
+  color: var(--accent-1);
+}
+
+#sendBtn:disabled { color: var(--text-sub); }
+
+#diary-actions {
+    display: flex;
+    justify-content: center;
+}
+
+.chat-button {
+    background: #fff;
+    color: var(--accent-1);
+    border: 1px solid var(--border-color);
+    border-radius: 20px;
+    padding: 8px 16px;
+    margin: 0 5px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    font-weight: 500;
+    transition: background-color 0.2s;
+}
+.chat-button:hover {
+    background: #f0f0f0;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.spin { animation: spin 1s linear infinite; }

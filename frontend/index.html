@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Talk Log</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://unpkg.com/feather-icons"></script>
+</head>
+<body>
+  <div id="chat-container">
+    <div id="chat" class="chat-box">
+      <!-- Chat messages will be added here -->
+      <p class="system"><b>system:</b> こんにちは！<br>今日の出来事を話してみませんか？</p>
+    </div>
+  </div>
+
+  <footer class="chat-footer">
+    <div class="input-area">
+      <textarea id="textInput" placeholder="メッセージを入力..." rows="1"></textarea>
+      <button id="recBtn" class="icon-btn" aria-label="Record / Stop">
+        <!-- Icon will be set by JS -->
+      </button>
+      <button id="sendBtn" class="icon-btn" aria-label="Send">
+        <!-- Icon will be set by JS -->
+      </button>
+    </div>
+    <div id="diary-actions" style="text-align: center; margin-top: 8px;">
+        <button id="finishBtn" class="chat-button">日記を作成</button>
+    </div>
+  </footer>
+
+  <script>
+    const BACKEND_URL = 'http://localhost:5500';
+    const recBtn = document.getElementById('recBtn');
+    const sendBtn = document.getElementById('sendBtn');
+    const textInput = document.getElementById('textInput');
+    const chatBox = document.getElementById('chat');
+    const finishBtn = document.getElementById('finishBtn');
+
+    let recorder = null;
+    let audioBlob = null;
+    let isRecording = false;
+    let isProcessing = false;
+    let isComposingIME = false; // IME変換中フラグを追加
+    const conversation = [];
+
+    // --- Icons ---
+    const micIcon = feather.icons.mic.toSvg({ width: 24, height: 24 });
+    const stopIcon = feather.icons.square.toSvg({ width: 24, height: 24, fill: 'currentColor' });
+    const sendIcon = feather.icons.send.toSvg({ width: 24, height: 24 });
+    const loadingIcon = feather.icons.loader.toSvg({ width: 24, height: 24, class: 'spin' });
+
+    // --- UI Update ---
+    function updateUIState() {
+      const hasContent = textInput.value.trim().length > 0;
+      const canInteract = !isRecording && !isProcessing;
+
+      textInput.disabled = isProcessing || isRecording;
+      sendBtn.disabled = !hasContent || !canInteract;
+      recBtn.disabled = isProcessing;
+      finishBtn.disabled = isProcessing || conversation.length === 0;
+
+      if (isProcessing) {
+        sendBtn.innerHTML = loadingIcon;
+        recBtn.innerHTML = micIcon;
+        recBtn.classList.remove('recording');
+      } else if (isRecording) {
+        recBtn.innerHTML = stopIcon;
+        recBtn.classList.add('recording');
+        sendBtn.innerHTML = sendIcon;
+      } else {
+        recBtn.innerHTML = micIcon;
+        recBtn.classList.remove('recording');
+        sendBtn.innerHTML = sendIcon;
+      }
+    }
+
+    // --- Chat Messaging (and other functions from previous steps) ---
+    // ... (All other JS functions like appendMessage, escapeHTML, etc. remain the same)
+    function appendMessage(role, htmlContent) {
+      const p = document.createElement('p');
+      p.className = role;
+      p.innerHTML = `<b>${role}:</b> ${htmlContent}`;
+      chatBox.appendChild(p);
+      setTimeout(() => chatBox.scrollTop = chatBox.scrollHeight, 50);
+      return p;
+    }
+
+    const escapeHTML = (str) => {
+      const div = document.createElement('div');
+      div.appendChild(document.createTextNode(str));
+      return div.innerHTML;
+    };
+
+    function addConversationMessage(role, text) {
+      const formattedHtml = escapeHTML(text).replace(/\n/g, '<br>');
+      appendMessage(role, formattedHtml);
+      if (role === 'user' || role === 'ai') {
+        conversation.push({ role, content: text });
+      }
+      updateUIState();
+    }
+    
+    function addSystemMessage(htmlContent, role = 'system') {
+        const p = document.createElement('p');
+        p.className = role;
+        p.innerHTML = `<b>${role}:</b> ${htmlContent}`;
+        chatBox.appendChild(p);
+        setTimeout(() => chatBox.scrollTop = chatBox.scrollHeight, 50);
+        return p;
+    }
+
+    async function startRecording() {
+      if (isRecording || isProcessing) return;
+      isRecording = true;
+      updateUIState();
+      addSystemMessage('録音を開始しました...');
+
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        recorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+        const chunks = [];
+        recorder.ondataavailable = (e) => chunks.push(e.data);
+        recorder.onstop = async () => {
+          isRecording = false;
+          stream.getTracks().forEach(track => track.stop());
+          const blob = new Blob(chunks, { type: 'audio/webm' });
+          if (blob.size > 100) {
+            audioBlob = blob;
+            await sendToChat({ audio: audioBlob });
+          } else {
+            addSystemMessage('録音データが短すぎるようです。', 'error');
+          }
+          updateUIState();
+        };
+        recorder.start();
+      } catch (err) {
+        console.error("Recording error:", err);
+        addSystemMessage(`録音エラー: ${err.message}`, 'error');
+        isRecording = false;
+        updateUIState();
+      }
+    }
+
+    function stopRecording() {
+      if (recorder && recorder.state === 'recording') {
+        recorder.stop();
+      }
+    }
+
+    async function sendToChat({ text = null, audio = null }) {
+      if (isProcessing) return;
+      isProcessing = true;
+      
+      const userMessage = text ? text : '[あなたの音声]';
+      addConversationMessage('user', userMessage);
+      if (text) textInput.value = '';
+
+      updateUIState();
+      const loadingMsg = addSystemMessage('AIが応答を考えています...', 'system loading');
+
+      const formData = new FormData();
+      formData.append('conversation', JSON.stringify(conversation));
+      if (text) formData.append('text', text);
+      if (audio) formData.append('audio', audio, 'recording.webm');
+
+      try {
+        const response = await fetch(`${BACKEND_URL}/api/chat`, { method: 'POST', body: formData });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Server error');
+        addConversationMessage('ai', data.reply);
+      } catch (error) {
+        addSystemMessage(`エラー: ${error.message}`, 'error');
+      } finally {
+        isProcessing = false;
+        audioBlob = null;
+        loadingMsg.remove();
+        updateUIState();
+      }
+    }
+
+    recBtn.onclick = () => isRecording ? stopRecording() : startRecording();
+    sendBtn.onclick = () => sendToChat({ text: textInput.value.trim() });
+    textInput.onkeydown = (e) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        if (isComposingIME) return; // IME変換中は送信しない
+        e.preventDefault();
+        if (!sendBtn.disabled) sendBtn.click();
+      }
+    };
+    textInput.oninput = updateUIState;
+    textInput.addEventListener('compositionstart', () => { isComposingIME = true; });
+    textInput.addEventListener('compositionend', () => { isComposingIME = false; });
+
+    finishBtn.onclick = async () => {
+        if (isProcessing || conversation.length === 0) return;
+
+        const confirmMsg = addSystemMessage(
+            '現在の会話をまとめて日記を作成しますか？<br><button id="confirm-yes" class="chat-button">はい</button> <button id="confirm-no" class="chat-button">いいえ</button>',
+            'system'
+        );
+
+        document.getElementById('confirm-yes').onclick = async () => {
+            confirmMsg.remove();
+            isProcessing = true;
+            updateUIState();
+            const processingMsg = addSystemMessage('日記を作成しています...');
+
+            try {
+                const response = await fetch(`${BACKEND_URL}/api/generate_diary`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ conversation }),
+                });
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.error || 'Server error');
+                
+                addSystemMessage(`日記が生成されました！<br><br><pre>${escapeHTML(data.summary)}</pre>`);
+                if (data.notion_url) {
+                    addSystemMessage(`Notionにも保存しました: <a href="${data.notion_url}" target="_blank">リンク</a>`);
+                }
+                conversation.length = 0; // Clear conversation
+            } catch (error) {
+                addSystemMessage(`日記作成エラー: ${error.message}`, 'error');
+            } finally {
+                isProcessing = false;
+                processingMsg.remove();
+                updateUIState();
+            }
+        };
+        document.getElementById('confirm-no').onclick = () => confirmMsg.remove();
+    };
+
+    // --- Initialization ---
+    window.addEventListener('DOMContentLoaded', () => {
+      feather.replace();
+      updateUIState();
+      const styleSheet = document.styleSheets[0];
+      styleSheet.insertRule(`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`, styleSheet.cssRules.length);
+      styleSheet.insertRule(`.spin { animation: spin 1s linear infinite; }`, styleSheet.cssRules.length);
+    });
+  </script>
+</body>
+</html>
