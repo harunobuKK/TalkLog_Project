@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Talk Log - Dashboard</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://unpkg.com/feather-icons"></script>
+</head>
+<body>
+  <header class="app-header">
+    <div class="logo">
+      <img src="images/logo.png" alt="Talk Log Logo"> 
+      <h1>Talk Log</h1>
+    </div>
+    <nav>
+      <a href="index.html" class="nav-link">チャット</a>
+      <a href="dashboard.html" class="nav-link active">ダッシュボード</a>
+    </nav>
+  </header>
+
+  <main class="dashboard-container">
+    <h2>感情の推移</h2>
+    <div class="chart-container">
+      <canvas id="sentimentChart"></canvas>
+    </div>
+
+    <h2>日記一覧</h2>
+    <div id="diary-list" class="diary-list-container">
+      <!-- 日記カードはここに動的に挿入されます -->
+      <p>日記を読み込んでいます...</p>
+    </div>
+  </main>
+
+  <!-- 日記詳細表示用モーダル -->
+  <div id="diary-modal" class="modal">
+    <div class="modal-content">
+      <span class="close-button">&times;</span>
+      <h3 id="modal-title"></h3>
+      <div id="modal-body"></div>
+    </div>
+  </div>
+
+  <script>
+    const BACKEND_URL = 'http://localhost:5500';
+    const diaryListDiv = document.getElementById('diary-list');
+    const modal = document.getElementById('diary-modal');
+    const modalTitle = document.getElementById('modal-title');
+    const modalBody = document.getElementById('modal-body');
+    const closeButton = document.querySelector('.close-button');
+
+    // モーダルを閉じる関数
+    closeButton.onclick = () => {
+      modal.style.display = 'none';
+    };
+    window.onclick = (event) => {
+      if (event.target == modal) {
+        modal.style.display = 'none';
+      }
+    };
+
+    async function fetchDiaries() {
+      try {
+        const response = await fetch(`${BACKEND_URL}/api/diaries`);
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const diaries = await response.json();
+        console.log("Fetched diaries:", diaries);
+        displayDiaries(diaries);
+        drawSentimentChart(diaries);
+      } catch (error) {
+        console.error("Error fetching diaries:", error);
+        diaryListDiv.innerHTML = '<p>日記の読み込みに失敗しました。</p>';
+      }
+    }
+
+    function displayDiaries(diaries) {
+      diaryListDiv.innerHTML = ''; // 既存のメッセージをクリア
+      if (diaries.length === 0) {
+        diaryListDiv.innerHTML = '<p>まだ日記がありません。チャットで日記を作成してみましょう！</p>';
+        return;
+      }
+
+      diaries.forEach(diary => {
+        const card = document.createElement('div');
+        card.className = 'diary-card';
+        
+        // 日付のフォーマット
+        const date = new Date(diary.date);
+        const formattedDate = date.toLocaleDateString('ja-JP', { year: 'numeric', month: '2-digit', day: '2-digit' });
+        const formattedTime = date.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
+
+        // 感情スコアの表示色
+        let sentimentColor = '#000';
+        if (diary.sentiment_score > 0.3) sentimentColor = '#28a745'; // Positive
+        else if (diary.sentiment_score < -0.3) sentimentColor = '#dc3545'; // Negative
+        else sentimentColor = '#ffc107'; // Neutral/Slight
+
+        card.innerHTML = `
+          <div class="card-header">
+            <span>${formattedDate} ${formattedTime}</span>
+            <span class="card-sentiment" style="color: ${sentimentColor};">感情: ${diary.sentiment_score ? diary.sentiment_score.toFixed(2) : 'N/A'}</span>
+          </div>
+          <div class="card-content">
+            <h3>${diary.highlight_events || 'ハイライトなし'}</h3>
+            <p>${diary.diary_content.split('\n')[0]}</p> <!-- 最初の行のみ表示 -->
+          </div>
+        `;
+        card.onclick = () => openDiaryModal(diary);
+        diaryListDiv.appendChild(card);
+      });
+    }
+
+    function openDiaryModal(diary) {
+      modalTitle.textContent = `日記 (${new Date(diary.date).toLocaleDateString('ja-JP')})`;
+      modalBody.innerHTML = diary.diary_content.replace(/\n/g, '<br>'); // 改行を<br>に変換
+      modal.style.display = 'block';
+    }
+
+    function drawSentimentChart(diaries) {
+      const ctx = document.getElementById('sentimentChart').getContext('2d');
+      
+      // 日記を日付順にソート (古いものから新しいものへ)
+      const sortedDiaries = [...diaries].sort((a, b) => new Date(a.date) - new Date(b.date));
+
+      const labels = sortedDiaries.map(diary => new Date(diary.date).toLocaleDateString('ja-JP'));
+      const data = sortedDiaries.map(diary => diary.sentiment_score);
+      const highlightEvents = sortedDiaries.map(diary => diary.highlight_events);
+
+      new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: '感情スコア',
+            data: data,
+            borderColor: 'rgb(75, 192, 192)',
+            tension: 0.1,
+            fill: false,
+            pointRadius: 5,
+            pointHoverRadius: 8,
+            pointBackgroundColor: (context) => {
+              const score = context.raw;
+              if (score > 0.3) return '#28a745'; // Positive
+              else if (score < -0.3) return '#dc3545'; // Negative
+              else return '#ffc107'; // Neutral/Slight
+            },
+            pointBorderColor: '#fff',
+            pointBorderWidth: 2,
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            y: {
+              beginAtZero: false,
+              min: -1.0,
+              max: 1.0,
+              title: {
+                display: true,
+                text: '感情スコア'
+              }
+            }
+          },
+          plugins: {
+            tooltip: {
+              callbacks: {
+                title: function(context) {
+                  return context[0].label;
+                },
+                label: function(context) {
+                  let label = context.dataset.label || '';
+                  if (label) {
+                    label += ': ';
+                  }
+                  label += context.parsed.y.toFixed(2);
+                  return label;
+                },
+                afterLabel: function(context) {
+                  const index = context.dataIndex;
+                  return highlightEvents[index] ? `出来事: ${highlightEvents[index]}` : '';
+                }
+              }
+            }
+          }
+        }
+      });
+    }
+
+    // ページ読み込み時に日記データを取得
+    document.addEventListener('DOMContentLoaded', fetchDiaries);
+  </script>
+</body>
+</html>

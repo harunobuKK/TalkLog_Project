@@ -8,6 +8,17 @@
   <script src="https://unpkg.com/feather-icons"></script>
 </head>
 <body>
+  <header class="app-header">
+    <div class="logo">
+      <img src="images/logo.png" alt="Talk Log Logo">
+      <h1>Talk Log</h1>
+    </div>
+    <nav>
+      <a href="index.html" class="nav-link active">チャット</a>
+      <a href="dashboard.html" class="nav-link">ダッシュボード</a>
+    </nav>
+  </header>
+
   <div id="chat-container">
     <div id="chat" class="chat-box">
       <!-- Chat messages will be added here -->
@@ -77,7 +88,6 @@
     }
 
     // --- Chat Messaging (and other functions from previous steps) ---
-    // ... (All other JS functions like appendMessage, escapeHTML, etc. remain the same)
     function appendMessage(role, htmlContent) {
       const p = document.createElement('p');
       p.className = role;
@@ -153,15 +163,22 @@
       if (isProcessing) return;
       isProcessing = true;
       
-      const userMessage = text ? text : '[あなたの音声]';
-      addConversationMessage('user', userMessage);
-      if (text) textInput.value = '';
+      let userMessageElement = null; // ユーザーメッセージのDOM要素への参照
+
+      if (audio) {
+        // 音声入力の場合、プレースホルダーをUIに表示（conversationにはまだ追加しない）
+        userMessageElement = appendMessage('user', '文字起こし中...');
+      } else if (text) {
+        // テキスト入力の場合、UIとconversationにすぐ追加
+        addConversationMessage('user', text);
+        textInput.value = '';
+      }
 
       updateUIState();
       const loadingMsg = addSystemMessage('AIが応答を考えています...', 'system loading');
 
       const formData = new FormData();
-      formData.append('conversation', JSON.stringify(conversation));
+      formData.append('conversation', JSON.stringify(conversation)); // 現時点でのconversationを送信
       if (text) formData.append('text', text);
       if (audio) formData.append('audio', audio, 'recording.webm');
 
@@ -169,9 +186,24 @@
         const response = await fetch(`${BACKEND_URL}/api/chat`, { method: 'POST', body: formData });
         const data = await response.json();
         if (!response.ok) throw new Error(data.error || 'Server error');
-        addConversationMessage('ai', data.reply);
+        
+        const actualUserText = data.user_message_text; // バックエンドから返された実際のユーザーテキスト
+
+        if (audio && userMessageElement) {
+            // 音声入力の場合、プレースホルダーを実際の文字起こしテキストに置き換える
+            userMessageElement.innerHTML = `<b>user:</b> ${escapeHTML(actualUserText).replace(/\n/g, '<br>')}`;
+            // conversation配列に実際の文字起こしテキストを追加
+            conversation.push({ role: 'user', content: actualUserText });
+        }
+
+        addConversationMessage('ai', data.reply); // AIの応答をUIとconversationに追加
+
       } catch (error) {
         addSystemMessage(`エラー: ${error.message}`, 'error');
+        // エラーが発生した場合、プレースホルダーがあれば削除
+        if (userMessageElement) {
+            userMessageElement.remove();
+        }
       } finally {
         isProcessing = false;
         audioBlob = null;
@@ -216,10 +248,12 @@
                 const data = await response.json();
                 if (!response.ok) throw new Error(data.error || 'Server error');
                 
-                addSystemMessage(`日記が生成されました！<br><br><pre>${escapeHTML(data.summary)}</pre>`);
+                let successMessage = `日記が生成されました！(感情スコア: ${data.sentiment_score.toFixed(2)})`;
+                successMessage += `<br><br><pre>${escapeHTML(data.summary)}</pre>`;
                 if (data.notion_url) {
-                    addSystemMessage(`Notionにも保存しました: <a href="${data.notion_url}" target="_blank">リンク</a>`);
+                    successMessage += `<br>Notionにも保存しました: <a href="${data.notion_url}" target="_blank">リンク</a>`;
                 }
+                addSystemMessage(successMessage);
                 conversation.length = 0; // Clear conversation
             } catch (error) {
                 addSystemMessage(`日記作成エラー: ${error.message}`, 'error');

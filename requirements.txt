@@ -7,3 +7,4 @@ google-api-core>=1.34.1,<3.0.0 # 互換性のある範囲を指定 (念のため
 googleapis-common-protos>=1.62.0,<2.0.0 # 互換性のある範囲を指定 (念のため)
 python-dotenv
 requests
+Flask-SQLAlchemy
